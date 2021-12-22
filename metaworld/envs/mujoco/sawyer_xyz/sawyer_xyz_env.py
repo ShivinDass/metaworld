@@ -78,7 +78,7 @@ class SawyerMocapBase(MujocoEnv, metaclass=abc.ABCMeta):
         sim.forward()
 
 
-class SawyerXYZEnv(SawyerMocapBase, metaclass=abc.ABCMeta):
+class SawyerXYZEnvOld(SawyerMocapBase, metaclass=abc.ABCMeta):
     _HAND_SPACE = Box(
         np.array([-0.525, .348, -.0525]),
         np.array([+0.525, 1.025, .7])
@@ -598,3 +598,51 @@ class SawyerXYZEnv(SawyerMocapBase, metaclass=abc.ABCMeta):
             caging_and_gripping = (caging_and_gripping + reach) / 2
 
         return caging_and_gripping
+
+
+import os
+import cv2
+from metaworld.envs.mujoco.utils.modder import TextureModderExtended
+class SawyerXYZEnv(SawyerXYZEnvOld):
+    
+    def __init__(
+                self,
+                model_name,
+                frame_skip=5,
+                hand_low=(-0.2, 0.55, 0.05),
+                hand_high=(0.2, 0.75, 0.3),
+                mocap_low=None,
+                mocap_high=None,
+                action_scale=1 / 100,
+                action_rot_scale=1):
+
+        super().__init__(
+                    model_name,
+                    frame_skip=frame_skip,
+                    hand_low=hand_low,
+                    hand_high=hand_high,
+                    mocap_low=mocap_low,
+                    mocap_high=mocap_high,
+                    action_scale=action_scale,
+                    action_rot_scale=action_rot_scale)
+
+        vid_path = '/home/shivin/Downloads/DAVIS/JPEGImages/480p/bear'
+        file_names = os.listdir(vid_path)
+        self._textures = [cv2.imread(os.path.join(vid_path, fn)) for fn in file_names[:5]] #Using all images causes the program to be slow. Can optimize this. 
+        self.cur_texture = 0
+        self.cur_step_dir = 1
+
+        self.modder = TextureModderExtended(self.sim)
+    
+    def step(self, action):
+        obs, reward, done, info = super().step(action)
+        
+        if not self._did_see_sim_exception:
+            # self.modder.set_given_texture('floor', self._textures[self.cur_texture])
+            self.modder.set_given_texture('skybox', self._textures[self.cur_texture])
+            
+            if not 0<=self.cur_texture+self.cur_step_dir<len(self._textures):
+                self.cur_step_dir *= -1
+            self.cur_texture += self.cur_step_dir
+        
+        return obs, reward, done, info
